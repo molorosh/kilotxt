@@ -1,20 +1,30 @@
 
 #include <ctype.h>
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
 
 struct termios orig_termios;
 
+void die(const char *s){
+    perror(s);
+    exit(1);
+}
+
 void disableRawMode(){
     // re-applies the user's previous terminal settings
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1){
+        die("tssetattr");
+    }
 }
 
 void enableRawMode(){
     // saves a copy of the user's current terminal settings
-    tcgetattr(STDIN_FILENO, &orig_termios);
+    if(tcgetattr(STDIN_FILENO, &orig_termios) == -1){
+        die("tsgetattr");
+    }
     atexit(disableRawMode);
     // create a new copy of the current settings
     struct termios raw = orig_termios;
@@ -35,22 +45,29 @@ void enableRawMode(){
     // ISIG : prevents app from raising SIGINT events
     // IEXTEN : disable Ctrl-V
     raw.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+    // set some timeouts for waiting for input
+    // that means that waiting for input won't halt forever
+    raw.c_cc[VMIN] = 0;
+    raw.c_cc[VTIME] = 1;
+    // set the new raw mode settings
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1){
+        die("tcsetattr (final)");
+    }
 }
 
 int main() {
     enableRawMode();
-    char c;
-    while (
-        read(STDIN_FILENO, &c, 1) == 1
-        &&
-        c != 'q'
-        ){
-            if(iscntrl(c)){
-                printf("%d\r\n", c);
-            }else{
-                printf("%d ('%c')\r\n", c, c);
-            }
+    
+    while (1){
+        char c = '\0';
+        if(read(STDIN_FILENO, &c, 1) == -1 && errno != EAGAIN) die("read");
+        if(iscntrl(c)){
+            printf("%d\r\n", c);
+        }else{
+            printf("%d ('%c')\r\n", c, c);
         }
+        if(c == 'q') break;
+    }
+
     return 0;
 }
