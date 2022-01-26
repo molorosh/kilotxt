@@ -20,9 +20,21 @@ void enableRawMode(){
     struct termios raw = orig_termios;
     // turns off automatic echoing of keystrokes to STDIN
     tcgetattr(STDIN_FILENO, &raw);
-    // disable ECHO : stops typing appearing in terminal
-    // disable ICANON : change from by-line to by-key
-    raw.c_lflag &= ~(ECHO|ICANON);
+    // input flags:
+    // IXON : disable terminal pausing
+    // ICRNL : disable input correction of newlines
+    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+    // output flags:
+    // OPOST : disable output correction of newlines
+    raw.c_oflag &= ~(OPOST);
+    // CS8 : set character size to 8 bits per byte
+    raw.c_cflag |= (CS8);
+    // local flags:
+    // ECHO : stops typing appearing in terminal
+    // ICANON : change from by-line to by-key
+    // ISIG : prevents app from raising SIGINT events
+    // IEXTEN : disable Ctrl-V
+    raw.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN);
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
 
@@ -35,9 +47,9 @@ int main() {
         c != 'q'
         ){
             if(iscntrl(c)){
-                printf("%d\n", c);
+                printf("%d\r\n", c);
             }else{
-                printf("%d ('%c')\n", c, c);
+                printf("%d ('%c')\r\n", c, c);
             }
         }
     return 0;
